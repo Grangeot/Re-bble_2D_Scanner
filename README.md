@@ -15,7 +15,7 @@ This script processes batch images containing ArUco markers and surrounding obje
 
 ### Key Features
 
-- Multi-scale ArUco marker detection (XS: 7×7, S: 4×4, M: 5×5, L: 6×6)
+- Multi-scale ArUco marker detection
 - Automatic pixel-to-meter conversion based on marker size
 - SAM2-powered segmentation for accurate object detection
 - Perspective transformation for straightened output
@@ -151,15 +151,25 @@ model_cfg = "configs/sam2.1/sam2.1_hiera_b+.yaml"
 
 ## Usage
 
+### Using the custom markers
+
+The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
+The script for 2D scanning supports four ArUco marker dictionary sizes:
+
+| Size | Dictionary | Physical Size (Standard) | Use Case |
+|------|-----------|------------------------|----------|
+| XS   | 7×7_250   | 7cm (A5)               | Small objects |
+| S    | 4×4_250   | 10cm (A5)              | Small-medium |
+| M    | 5×5_250   | 14cm (A4)              | Medium objects |
+| L    | 6×6_250   | 20cm (A3)              | Large objects/rubble |
+
+**Important**: Update `pixel_to_meter_ratio_*` values based on your actual printed marker sizes.
+
 ### Prepare Your Files
 
-1. Create input directory structure:
-```bash
-mkdir -p ../input/
-mkdir -p ../output/
-```
+1. Take a single picture per rubble piece, as vertical as possible above it. The entire perimeter of each unit should be visible in the picture in order to correctly segment each image. 
 
-2. Place your JPG images in `../input/`
+2. Transfer the phone pictures to your computer and place your JPG images in `../input/`
 
 ### Run the Script
 
@@ -187,48 +197,7 @@ After processing, you'll find:
 
 - **Contours data**: `all_contours_[TIMESTAMP].csv`
   - Extracted object contours in meter-based coordinates
-  - Format: `MarkerID, Point1_X,Point1_Y; Point2_X,Point2_Y; ...`
 
-## Understanding the Output CSV
-
-### Contours CSV Format
-
-Each row contains:
-- **Marker ID**: `[SIZE]_[BATCH]_[ID]_[INDEX]` (e.g., `L_A_15_1`)
-- **Points**: Semicolon-separated coordinates in meters, relative to object center
-- **Format**: `x1,y1;x2,y2;x3,y3;...`
-
-Example:
-```
-L_A_15_1,-0.25,0.30;-0.20,0.35;-0.15,0.33;-0.20,0.28
-```
-
-# Using the custom markers
-
-The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
-
-## Marker Sizes
-
-The script for 2D scanning supports four ArUco marker dictionary sizes:
-
-| Size | Dictionary | Physical Size (Standard) | Use Case |
-|------|-----------|------------------------|----------|
-| XS   | 7×7_250   | 7cm (A5)               | Small objects |
-| S    | 4×4_250   | 10cm (A5)              | Small-medium |
-| M    | 5×5_250   | 14cm (A4)              | Medium objects |
-| L    | 6×6_250   | 20cm (A3)              | Large objects/rubble |
-
-**Important**: Update `pixel_to_meter_ratio_*` values based on your actual printed marker sizes.
-
-## Generating ArUco Markers
-
-The script `Re-bble_Aruco Generator.py` is provided if you need to generate your own ArUco markers. The generated markers are stored in the `aruco_markers` directory. 
-To generate printable files from them, I used Indesign datamerge. Feel free to use other methods.
-
-### Instructions to Generate and Print ArUco Markers:
-1. **Run the Script**: Execute the `Re-bble_Aruco Generator.py` script. This will create the markers and save them in the specified output directory.
-2. **Locate the Markers**: After running the script, navigate to the `aruco_markers` directory. You will find subdirectories for each marker size (extra small, small, medium, large).
-3. **Printing the Markers**: Open the SVG files in a compatible viewer or web browser. You can print them directly from there. Ensure that the print settings maintain the original size of the markers for accurate detection during scanning.
 
 ## Troubleshooting
 
@@ -264,6 +233,16 @@ parameters.adaptiveThreshWinSizeMin = 3      # Smaller = more sensitive
 parameters.adaptiveThreshWinSizeMax = 23     # Larger = broader search
 parameters.minMarkerPerimeterRate = 0.03     # Minimum marker size ratio
 ```
+
+## Generating ArUco Markers
+
+The script `Re-bble_Aruco Generator.py` is provided if you need to generate your own ArUco markers. The generated markers are stored in the `aruco_markers` directory. 
+To generate printable files from them, I used Indesign datamerge. Feel free to use other methods.
+
+### Instructions to Generate and Print ArUco Markers:
+1. **Run the Script**: Execute the `Re-bble_Aruco Generator.py` script. This will create the markers and save them in the specified output directory.
+2. **Locate the Markers**: After running the script, navigate to the `aruco_markers` directory. You will find subdirectories for each marker size (extra small, small, medium, large).
+3. **Printing the Markers**: Open the SVG files in a compatible viewer or web browser. You can print them directly from there. Ensure that the print settings maintain the original size of the markers for accurate detection during scanning.
 
 ## License
 
