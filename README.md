@@ -20,12 +20,11 @@ This script processes batch images containing ArUco markers and surrounding obje
 The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
 The script for 2D scanning supports four ArUco marker dictionary sizes:
 
-| Size | Dictionary | Physical Size (Standard) | Use Case |
+| Size | Dictionary | Marker Size | Printer Support Size |
 |------|-----------|------------------------|----------|
-| XS   | 7×7_250   | 7cm (A5)               | Small objects |
-| S    | 4×4_250   | 10cm (A5)              | Small-medium |
-| M    | 5×5_250   | 14cm (A4)              | Medium objects |
-| L    | 6×6_250   | 20cm (A3)              | Large objects/rubble |
+| S    | 4×4_250   | 10cm                   | A5
+| M    | 5×5_250   | 14cm                   | A4
+| L    | 6×6_250   | 20cm                   | A3
 
 **Important**: Update `pixel_to_meter_ratio_*` values based on your actual printed marker sizes.
 
