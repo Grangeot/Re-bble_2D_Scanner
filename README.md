@@ -241,6 +241,13 @@ Copyright (c) 2025 Maxence Grangeot EPFL
 ## Context and use case
 
 This tool was developped as part of the [PhD Research](https://go.epfl.ch/rubble-reuse) of Maxence Grangeot at SXL, EPFL
+It was used to help prefabricated walls from concrete rubble to drastically reduce the environmental impact of concrete structures.
+Re:bble Prefa walls:
+![alt text](<visuals/Maxence GRANGEOT_SXL-CRCL-EPFL_prototype-07_prefabrication_HD_image-126.jpg>)
+Re:bble Tower - a two-storey demonstrator from concrete rubble
+![alt text](<visuals/Maxence GRANGEOT_SXL-CRCL-EPFL_prototype-07_tower_HD_image_3_no columns brighter.jpg>)
+Re:bble Pavilion - a public installation to showcase this innovative construction method
+![alt text](<visuals/Maxence GRANGEOT_SXL-CRCL-EPFL_prototype-08_image_11.jpg>)
 
 ## Aknowlegdements
 
