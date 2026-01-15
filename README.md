@@ -1,6 +1,6 @@
 # Re:bble 2D Scanner
 
-An image processing tool that scans rubble shapes in 2D using phone pictures through aruco markers, image segmentation and perspective transformation.
+An image processing tool that scans rubble shapes in 2D using phone pictures through  markers detection, image segmentation and perspective transformation.
 
 ![Detecting 2D Rubble shape using phone pictures](<visuals/MAXENCE GRANGEOT_RE-BBLE_2D_SCANNER_IMG-01_LR.png>)
 
