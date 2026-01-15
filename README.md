@@ -20,7 +20,7 @@ This script processes batch images containing ArUco markers and surrounding obje
 The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
 The script for 2D scanning supports four ArUco marker dictionary sizes:
 
-| Size | Dictionary | Marker Size | Printer Support Size |
+| Size | Dictionary | Marker Size | Printed Support Size |
 |------|-----------|------------------------|----------|
 | S    | 4×4_250   | 10cm                   | A5
 | M    | 5×5_250   | 14cm                   | A4
@@ -236,7 +236,11 @@ To generate printable files from them, I used Indesign datamerge. Feel free to u
 ## License
 
 [MIT License](./LICENSE)
-Copyright (c) 2025 Maxence Grangeot
+Copyright (c) 2025 Maxence Grangeot EPFL
+
+## Context and use case
+
+This tool was developped as part of the (PhD Research)[https://go.epfl.ch/rubble-reuse] of Maxence Grangeot at SXL, EPFL
 
 ## Aknowlegdements
 
