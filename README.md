@@ -2,6 +2,8 @@
 
 An image processing tool that scans rubble shapes in 2D using phone pictures through aruco markers, image segmentation and perspective transformation.
 
+![Detecting 2D Rubble shape using phone pictures](<visuals/MAXENCE GRANGEOT_RE-BBLE_2D_SCANNER_IMG-01_LR.png>)
+
 ## Overview
 
 This script processes batch images containing ArUco markers and surrounding objects. It:
@@ -38,6 +40,7 @@ torchvision>=0.15.0
 Pillow>=9.5.0
 matplotlib>=3.7.0
 sam2
+svgwrite (optional, for aruco marker generation)
 ```
 
 ## Installation
@@ -200,9 +203,13 @@ Example:
 L_A_15_1,-0.25,0.30;-0.20,0.35;-0.15,0.33;-0.20,0.28
 ```
 
+# Using the custom markers
+
+The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
+
 ## Marker Sizes
 
-The script supports four ArUco marker dictionary sizes:
+The script for 2D scanning supports four ArUco marker dictionary sizes:
 
 | Size | Dictionary | Physical Size (Standard) | Use Case |
 |------|-----------|------------------------|----------|
@@ -212,6 +219,16 @@ The script supports four ArUco marker dictionary sizes:
 | L    | 6×6_250   | 20cm (A3)              | Large objects/rubble |
 
 **Important**: Update `pixel_to_meter_ratio_*` values based on your actual printed marker sizes.
+
+## Generating ArUco Markers
+
+The script `Re-bble_Aruco Generator.py` is provided if you need to generate your own ArUco markers. The generated markers are stored in the `aruco_markers` directory. 
+To generate printable files from them, I used Indesign datamerge. Feel free to use other methods.
+
+### Instructions to Generate and Print ArUco Markers:
+1. **Run the Script**: Execute the `Re-bble_Aruco Generator.py` script. This will create the markers and save them in the specified output directory.
+2. **Locate the Markers**: After running the script, navigate to the `aruco_markers` directory. You will find subdirectories for each marker size (extra small, small, medium, large).
+3. **Printing the Markers**: Open the SVG files in a compatible viewer or web browser. You can print them directly from there. Ensure that the print settings maintain the original size of the markers for accurate detection during scanning.
 
 ## Troubleshooting
 
@@ -260,3 +277,5 @@ If you use this tool in research, please cite:
 - **SAM2**: Ravi et al. 2024, "SAM 2: Segment Anything in Images and Videos"
 - **OpenCV**: Bradski, G. et al., OpenCV library, https://opencv.org/
 - **ArUco**: Garrido-Jurado, S., et al. (2014), "Automatic generation and detection of highly reliable fiducial markers under occlusion"
+
+
