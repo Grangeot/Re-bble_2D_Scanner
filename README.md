@@ -250,12 +250,8 @@ parameters.minMarkerPerimeterRate = 0.03     # Minimum marker size ratio
 
 ## License
 
-MIT License
-Maxence Grangeot - EPFL
-
-## Authors
-
-[Add author information]
+[MIT License](./LICENSE)
+Copyright (c) 2025 Maxence Grangeot
 
 ## Aknowlegdements
 
