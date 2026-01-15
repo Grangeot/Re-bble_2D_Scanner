@@ -240,7 +240,7 @@ Copyright (c) 2025 Maxence Grangeot EPFL
 
 ## Context and use case
 
-This tool was developped as part of the (PhD Research)[https://go.epfl.ch/rubble-reuse] of Maxence Grangeot at SXL, EPFL
+This tool was developped as part of the [PhD Research](https://go.epfl.ch/rubble-reuse) of Maxence Grangeot at SXL, EPFL
 
 ## Aknowlegdements
 
