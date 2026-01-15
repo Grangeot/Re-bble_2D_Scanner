@@ -8,20 +8,60 @@ An image processing tool that scans rubble shapes in 2D using phone pictures thr
 
 This script processes batch images containing ArUco markers and surrounding objects. It:
 
-1. **Detects ArUco markers** using OpenCV (supports 4 marker sizes: XS, S, M, L)
-2. **Segments objects** using Meta's SAM2 (Segment Anything Model 2) with prompt points
-3. **Performs perspective transformation** to straighten the image based on marker position
-4. **Extracts contours** and exports them in a standardized CSV format with meter-based coordinates
+1. **Detects scale markers** using OpenCV 
+2. **Segments rubble shapes** using Meta's Segment Anything Model 2
+3. **Performs perspective transformation** to straighten the image based on camera angle
+4. **Extracts contours** and exports them in a CSV format with meter-based coordinates
 
-### Key Features
+## Usage
 
-- Multi-scale ArUco marker detection
-- Automatic pixel-to-meter conversion based on marker size
-- SAM2-powered segmentation for accurate object detection
-- Perspective transformation for straightened output
-- Batch processing with detailed logging
-- Contour simplification and center normalization
-- GPU/MPS/CPU device auto-detection
+### Using the custom markers
+
+The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
+The script for 2D scanning supports four ArUco marker dictionary sizes:
+
+| Size | Dictionary | Physical Size (Standard) | Use Case |
+|------|-----------|------------------------|----------|
+| XS   | 7×7_250   | 7cm (A5)               | Small objects |
+| S    | 4×4_250   | 10cm (A5)              | Small-medium |
+| M    | 5×5_250   | 14cm (A4)              | Medium objects |
+| L    | 6×6_250   | 20cm (A3)              | Large objects/rubble |
+
+**Important**: Update `pixel_to_meter_ratio_*` values based on your actual printed marker sizes.
+
+### Prepare Your Files
+
+1. Take a single picture per rubble piece, as vertical as possible above it. The entire perimeter of each unit should be visible in the picture in order to correctly segment each image. 
+
+2. Transfer the phone pictures to your computer and place your JPG images in `../input/`
+
+### Run the Script
+
+```bash
+python "Re-bble_2D_Scanner.py"
+```
+
+The script will:
+- Process all JPG images in the input folder
+- Generate output files
+- Create a processing log
+
+### Output Files
+
+After processing, you'll find:
+
+- **Marked-up images**: `1_detected_markers_query_points_segmented_outline_[MARKER]_[INDEX].jpg`
+  - Shows detected markers, SAM query points, and segmented outlines
+  
+- **Straightened images**: `2_straightened_photo_only_[MARKER]_[INDEX].jpg`
+  - Perspective-corrected images aligned with the marker
+
+- **Processing log**: `processing_log_[TIMESTAMP].csv`
+  - Detailed log of all processed images including errors and timing
+
+- **Contours data**: `all_contours_[TIMESTAMP].csv`
+  - Extracted object contours in meter-based coordinates
+
 
 ## Requirements
 
@@ -148,56 +188,6 @@ pixel_to_meter_ratio_L = 0.2003 / MARKER_SIZE  # 20.03cm marker (A3)
 sam2_checkpoint = "checkpoints/sam2.1_hiera_base_plus.pt"
 model_cfg = "configs/sam2.1/sam2.1_hiera_b+.yaml"
 ```
-
-## Usage
-
-### Using the custom markers
-
-The custom markers used for the detection, naming and image straigthening are provided in the [aruco markers folder](<aruco markers>). 
-The script for 2D scanning supports four ArUco marker dictionary sizes:
-
-| Size | Dictionary | Physical Size (Standard) | Use Case |
-|------|-----------|------------------------|----------|
-| XS   | 7×7_250   | 7cm (A5)               | Small objects |
-| S    | 4×4_250   | 10cm (A5)              | Small-medium |
-| M    | 5×5_250   | 14cm (A4)              | Medium objects |
-| L    | 6×6_250   | 20cm (A3)              | Large objects/rubble |
-
-**Important**: Update `pixel_to_meter_ratio_*` values based on your actual printed marker sizes.
-
-### Prepare Your Files
-
-1. Take a single picture per rubble piece, as vertical as possible above it. The entire perimeter of each unit should be visible in the picture in order to correctly segment each image. 
-
-2. Transfer the phone pictures to your computer and place your JPG images in `../input/`
-
-### Run the Script
-
-```bash
-python "Re-bble_2D_Scanner.py"
-```
-
-The script will:
-- Process all JPG images in the input folder
-- Generate output files
-- Create a processing log
-
-### Output Files
-
-After processing, you'll find:
-
-- **Marked-up images**: `1_detected_markers_query_points_segmented_outline_[MARKER]_[INDEX].jpg`
-  - Shows detected markers, SAM query points, and segmented outlines
-  
-- **Straightened images**: `2_straightened_photo_only_[MARKER]_[INDEX].jpg`
-  - Perspective-corrected images aligned with the marker
-
-- **Processing log**: `processing_log_[TIMESTAMP].csv`
-  - Detailed log of all processed images including errors and timing
-
-- **Contours data**: `all_contours_[TIMESTAMP].csv`
-  - Extracted object contours in meter-based coordinates
-
 
 ## Troubleshooting
 
