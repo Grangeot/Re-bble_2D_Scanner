@@ -1,5 +1,7 @@
 # Re:bble 2D Scanner
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1234567.svg)](https://doi.org/10.5281/zenodo.18404477)
+
 An image processing tool that scans rubble shapes in 2D using phone pictures through  markers detection, image segmentation and perspective transformation.
 
 ![Detecting 2D Rubble shape using phone pictures](<visuals/MAXENCE GRANGEOT_RE-BBLE_2D_SCANNER_IMG-01_LR.png>)
