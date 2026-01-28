@@ -258,3 +258,24 @@ If you use this tool in research, please cite:
 - **ArUco**: Garrido-Jurado, S., et al. (2014), "Automatic generation and detection of highly reliable fiducial markers under occlusion"
 
 
+## How to cite
+
+To cite the software follow the following BibTeX entry:
+
+```bibtex
+@software{Re-bbleScanner2025,
+    title = {{Re:bble 2D Scanner}},
+    author = {Maxence Grangeot},
+    year = {2025},
+    doi = {10.5281/zenodo.18404477},
+    url = {https://github.com/Grangeot/Re-bble_2D_Scanner}
+}
+```
+
+or the associated Zenodo DOI:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1234567.svg)](https://doi.org/10.5281/zenodo.18404477)
+
+
+## Disclaimer
+This software is provided "as-is" as a prototype, without any warranties, express or implied, including but not limited to fitness for a particular purpose or non-infringement. The user assumes full responsibility for the use of the software, and we are not liable for any damages, losses, or misuse arising from its use. By using this software, you agree to these terms.
