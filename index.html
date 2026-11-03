@@ -166,7 +166,7 @@ svg text{font-family:JBM,ui-monospace,monospace}
 .tagtx{fill:var(--on-ink)}
 .human{fill:var(--soft);stroke:var(--ink);stroke-width:8}
 .ground{stroke:var(--ink)}
-.drawing.cfgd{height:300px;padding:10px 12px 0}
+.drawing.cfgd{height:auto;padding:10px 12px 0}
 .drawing.cfgd svg{height:100%;max-height:none}
 .figstone{fill:var(--soft);stroke:var(--ink);stroke-linejoin:round}
 .fig{cursor:pointer}
@@ -650,7 +650,7 @@ label.fabopt{cursor:pointer}
 .cz{top:8px;bottom:auto;right:6px;flex-direction:column}
 .candid{letter-spacing:0;white-space:nowrap}
 /* v0.25 */
-.cfgwrap svg.cfg{height:36vh;max-height:none}
+.cfgwrap svg.cfg{height:clamp(200px,34vh,330px);max-height:none}
 .tagsTop{pointer-events:none}
 .candic{fill:none;stroke:#fff;stroke-width:2.2}
 .cand svg{display:block}
@@ -687,6 +687,21 @@ svg.cfg{-webkit-user-select:none;user-select:none}
 .ulctl .inp.sm{width:92px}
 .segnote{margin:10px 0 2px;line-height:1.4}
 .ground{pointer-events:none}
+
+/* v0.32 */
+.cfgd{margin-bottom:22px}
+.hl3{stroke:var(--muted);stroke-opacity:.55}
+.credits .disclaimer{margin-top:14px;font-size:11px;color:var(--muted)}
+.dot3{fill:var(--ink);fill-opacity:.45}
+/* v0.34 */
+.pc.warnp .fill{fill:var(--bad);fill-opacity:.85}
+.warn.devsw{margin:0 0 10px}
+/* v0.35: fixed layout for construction steps (the wall never moves between steps) */
+.cmain{justify-content:flex-start}
+.cmain .drawing{height:46vh;display:flex;align-items:center;justify-content:center}
+.cmain .drawing > svg{height:100%;width:100%;max-height:none}
+.ctext{height:calc(4 * 1.45em + 26px);min-height:0;overflow-y:auto}
+.arrowhd{fill:var(--ink)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -1952,7 +1967,7 @@ const Constr = (() => {
         for (const it of set.slice().sort((u, v) => u.bot - v.bot || u.x0 - v.x0)) visit(it);
         return out;
       };
-      const lintDone = new Set(), boxDone = new Set(), lintAll = typeof lintelRects === 'function' ? lintelRects(project) : [], opsAll = project.openings || [];
+      const placedSet = new Set(), lintDone = new Set(), boxDone = new Set(), lintAll = typeof lintelRects === 'function' ? lintelRects(project) : [], opsAll = project.openings || [];
       let rem = items.slice().sort((a, b) => a.bot - b.bot || a.x0 - b.x0), prev = 0, k = 0;
       while (prev < wall.h - 1 && k < 200) {
         let limit = Math.min(wall.h, prev + F - (k ? ovMin : 0));
@@ -1975,17 +1990,30 @@ const Constr = (() => {
           if (score > best) { best = score; T = t; }
         }
         // pull in every piece that has to be set before a piece of this lift (it lies under one of its overhangs)
-        const inRow = new Set(rem.filter(it => it.bot < T));
-        for (let grow = true; grow;) { grow = false; for (const it of [...inRow]) for (const q of before.get(it) || []) if (!inRow.has(q) && rem.includes(q)) { inRow.add(q); grow = true; } }
-        const row = topo([...inRow]);
+        // a piece must rest on the previous pour or on pieces already set: "mid-air" pieces wait for a later lift,
+        // and this lift's pour stops below them so it never fills the space they will take
+        let inRow, row;
+        for (let pass = 0; pass < 6; pass++) {
+          inRow = new Set(rem.filter(it => it.bot < T));
+          for (let grow = true; grow;) { grow = false; for (const it of [...inRow]) for (const q of before.get(it) || []) if (!inRow.has(q) && rem.includes(q)) { inRow.add(q); grow = true; } }
+          row = topo([...inRow]); const ok = new Set(), late = [];
+          for (const it of row) { const pre = before.get(it) || []; if (pre.some(q => inRow.has(q) && !ok.has(q))) { late.push(it); continue; } if (it.bot <= prev + 80 || pre.some(q => placedSet.has(q) || ok.has(q))) ok.add(it); else late.push(it); }
+          if (!late.length) break;
+          const low = Math.min(...late.map(it => it.bot));
+          if (low >= T || low <= prev + 50) { row = row.filter(it => ok.has(it)); inRow = new Set(row); break; }
+          T = Math.max(prev + 50, low);
+        }
+        row.forEach(it => placedSet.add(it));
         rem = rem.filter(it => !inRow.has(it));
         for (const it of row) if (it.cy > T && it.top > T && T < wall.h - 1) { warnings.push({ pid: it.pid, above: it.cy - T, lift: k }); suggestF = Math.max(suggestF, F + (it.cy - T)); }
-        lifts.push({ k, base: Math.max(0, T - F), top: T, pids: row.map(r => r.pid), overlap: k ? Math.max(0, prev - Math.max(0, T - F)) : 0 });
-        steps.push({ type: 'formwork', lift: k, top: T, base: Math.max(0, T - F) });
+        // the formwork is raised as high as its overlap allows; the pour may stop below its top
+        const fb = k ? Math.max(0, prev - ovMin) : 0, ft = Math.min(wall.h, Math.max(T, fb + F)), fbase = Math.max(0, ft - F);
+        lifts.push({ k, base: fbase, top: T, fwTop: ft, pids: row.map(r => r.pid), overlap: k ? Math.max(0, prev - fbase) : 0 });
+        steps.push({ type: 'formwork', lift: k, top: ft, base: fbase, pour: T });
         { const due = opsAll.filter(o => o.y < T && !boxDone.has(o)); if (due.length) { due.forEach(o => boxDone.add(o)); steps.push({ type: 'opbox', lift: k, ops: due.map(o => opsAll.indexOf(o)) }); } }
         { const due = lintAll.filter(l => l.y <= prev + 1 && !lintDone.has(l)); /* set once the pour has reached its seat */ if (due.length) { due.forEach(l => lintDone.add(l)); steps.push({ type: 'lintel', lift: k, n: due.length }); } }
         for (const it of row) pieceSteps(it, k);
-        steps.push({ type: 'fill', lift: k, top: T });
+        steps.push({ type: 'fill', lift: k, top: T, fwTop: ft });
         prev = T; k++;
       }
       steps.push({ type: 'done' });
@@ -2049,7 +2077,7 @@ const Constr = (() => {
 })();
 
 /* ===== Core: utils, storage, state, icons ===== */
-const APP_VERSION = '0.30', APP_RELEASE = '01.11.2026';
+const APP_VERSION = '0.37', APP_RELEASE = '03.11.2026';
 const I18N = { en: {} }; // future: fr, es
 const t = s => (I18N[S.settings.lang] || {})[s] || s;
 const $ = (s, r = document) => r.querySelector(s);
@@ -2372,7 +2400,7 @@ function libraryView() {
     <header class="title">${t('LIBRARY')}</header>
     <main class="scroll pad">
       <h3 class="sec-h">${icon('pin')} ${t('STOCK LOCATIONS')}</h3>
-      ${locs.map(l => { const ps = locPieces(l.id); const a = ps.reduce((s, p) => s + p._area, 0); return `<div class="rowwrap"><button class="row" data-a="open-loc" data-id="${l.id}"><span>${esc(l.name)}</span><span class="date">${ps.length} ${t('pcs')} · ${fmt1(m2(a))} m²</span></button><button class="rowmenu" data-a="loc-menu" data-id="${l.id}" aria-label="${t('Rename or delete')}">⋯</button></div>`; }).join('')}
+      ${locs.map(l => { const ps = locPieces(l.id); const a = ps.reduce((s, p) => s + p._area, 0); return `<div class="rowwrap"><button class="row" data-a="open-loc" data-id="${l.id}"><span>${esc(l.name)}</span><span class="date">${ps.length} ${t('pcs')} ${icon('area', 'rowic')} ${fmt1(m2(a))} m²</span></button><button class="rowmenu" data-a="loc-menu" data-id="${l.id}" aria-label="${t('Rename or delete')}">⋯</button></div>`; }).join('')}
       <p class="muted small">${t('Each construction site keeps its own stock of scanned rubble. Pieces stay in the stock where they were scanned.')}</p>
     </main>
     <div class="actions"><button class="btn wide" data-a="new-loc">${icon('plus')} ${t('NEW LOCATION')}</button></div>
@@ -2421,7 +2449,7 @@ function stockView(locId) {
       ${list.length ? `<div class="grid g3">${(dims => list.map(p => pieceCard(p, { dims, check: u.selMode, selected: u.sel.has(p.id), action: u.selMode ? 'lib-toggle' : 'piece' })).join(''))(gridDims(list))}${u.libStatus === 'stock' && !u.selMode ? addCell(locId, list.length) : ''}</div>` :
       `<div class="empty pad nowalls"><div>${u.libStatus === 'stock' ? '' : `<p>${t('Nothing in this list.')}</p>`}${u.libStatus === 'stock' ? `<button class="btn big" data-a="scan" data-loc="${locId}">${icon('plus')} ${t('ADD RUBBLE')}</button>` : ''}</div></div>`}
     </main>
-    <div class="surf">${icon('area')} ${list.length} ${t('PCS')} · ${t('SURFACE')} <b>${fmt2(m2(tot))} m²</b></div>
+    <div class="surf">${list.length} ${t('PCS')} ${icon('area')} ${t('SURFACE')} <b>${fmt2(m2(tot))} m²</b></div>
     <div class="actions two">
       ${u.selMode ? `<button class="btn sec" data-a="lib-del" ${u.sel.size ? '' : 'disabled'}>${icon('trash')} ${t('DELETE')}</button><button class="btn" data-a="lib-sel">${t('DONE')}</button>`
       : `<button class="btn sec" data-a="lib-sel" ${list.length ? '' : 'disabled'}>${icon('check')} ${t('SELECT')}</button><button class="btn" data-a="scan" data-loc="${locId}">${icon('camera')} ${t('SCAN RUBBLE')}</button>`}
@@ -2535,7 +2563,8 @@ function settingsView() {
       <h3 class="sec-h">${t('ABOUT')}</h3>
       <div class="credits"><p><b>Mūro</b> · v${APP_VERSION} · ${t('released')} ${APP_RELEASE}</p><p>${t('Created by')} <b>Maxence Grangeot</b>, ${t('with the help of')} Claude Opus 5.5 Medium.</p><p class="orig">${t('Originally designed with')} Eric Duong</p>
       <p>${t('Suggestions and feedback are welcome:')}<br><a href="mailto:maxence.grangeot@alumni.epfl.ch?subject=${encodeURIComponent('Mūro feedback')}" target="_blank" rel="noopener">maxence.grangeot@alumni.epfl.ch</a></p>
-      <p>${t('Related PhD research and thesis:')} <a href="https://go.epfl.ch/rubble" target="_blank" rel="noopener">go.epfl.ch/rubble</a></p></div>
+      <p>${t('Related PhD research and thesis:')} <a href="https://go.epfl.ch/rubble" target="_blank" rel="noopener">go.epfl.ch/rubble</a></p>
+      <p class="disclaimer">${t('Disclaimer: provided as is, without warranty of any kind. Use at your own risk; designs, quantities and instructions must be checked by a qualified professional before construction.')}</p></div>
 `)}
     </main>
     ${tabbar()}</div>`;
@@ -2652,7 +2681,7 @@ function scanOv() {
         ${!c.rectCanvas ? '' : `<div class="pad sens"><div class="refine"><label>${t('Refine')} <button class="ibtn tiny" data-a="info" data-v="sens" aria-label="${t('About refining the outline')}">${icon('info')}</button></label><input type="range" class="big" min="0.6" max="1.4" step="0.05" value="${c.sens}" data-a="scan-sens" aria-label="${t('Outline sensitivity')}"></div></div>`}
         <div class="pad">
           <div class="kv"><span>${c.edit ? t('ID') : t('NEW ID')} <b>${c.edit ? esc(S.pieces[c.edit].code) : `${c.size}_${String((S.meta.counters[c.size] || 0) + 1).padStart(3, '0')}`}</b></span><span>${t('AREA')} <b>${Math.round(A / 100)} cm²</b></span></div>
-          <div class="kv"><span>${t('THICKNESS')} <small class="${o.requireT ? 'err' : 'muted'}">${o.requireT ? t('required for in situ') : t('optional')}</small></span><span class="inp"><input type="number" inputmode="numeric" placeholder="—" value="${c.thickness || ''}" data-a="scan-thick" class="dragnum" data-min="10" data-max="1000"><em>mm</em></span></div>
+          <div class="kv"><span>${t('THICKNESS')} <small class="muted">${o.requireT ? t('required for in situ') : t('optional')}</small></span><span class="inp"><input type="number" inputmode="numeric" placeholder="—" value="${c.thickness || ''}" data-a="scan-thick" class="dragnum" data-min="10" data-max="1000"><em>mm</em></span></div>
           ${(S.meta.lastThk || []).length ? `<div class="thsug" hidden>${S.meta.lastThk.map(v => `<button class="thk" data-a="thk-sug" data-v="${v}">${v}</button>`).join('')}</div>` : ''}
           ${faceRows(c, 'scan-face')}
           ${o.queue.length ? `<p class="muted small">${o.queue.length} ${t('more photo(s) in queue')}</p>` : ''}
@@ -2817,6 +2846,7 @@ function cropOfCur(c) {
 }
 // ---------- reviewing pieces that are already saved (going back in a batch, or from the stock) ----------
 const prevSavedId = o => { const sv = (o.saved || []).filter(id => S.pieces[id]); if (o.cur && o.cur.edit) { const i = sv.indexOf(o.cur.edit); return i > 0 ? sv[i - 1] : null; } return sv[sv.length - 1] || null; };
+function dataURLtoBlob(u) { const [h, b64] = u.split(','), mime = (h.match(/data:([^;]+)/) || [])[1] || 'image/jpeg', bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); }
 async function reviewSaved(id) {
   const o = S.ui.ov, p = S.pieces[id]; if (!p) return;
   let img = S.imgCache[id] || await getImages(id);
@@ -2829,7 +2859,7 @@ async function reviewSaved(id) {
   if (o.cur && !o.cur.edit && o.cur.file) o.queue.unshift(o.cur.file); // the photo being reviewed goes back to the queue
   const base = { edit: id, sel: null, sens: 1, size: p.size, faceA: p.faceA !== false, faceB: p.faceB !== false, thickness: p.thickness || '' };
   // re-open the original photo so the outline can be refined again; fall back to the stored crop
-  const src = (o.files && o.files[id]) || (img.photo ? await (await fetch(img.photo)).blob() : null);
+  const src = (o.files && o.files[id]) || (img.photo ? dataURLtoBlob(img.photo) : null);
   if (src) {
     o.stage = 'processing'; o.msg = t('Reading photo…'); renderOv(); await nextFrame();
     try {
@@ -3453,6 +3483,8 @@ function wallDraw(pr, d, o = {}) {
   let s = `<svg class="wd ${o.cls || ''}" viewBox="${fmt1(-padL)} ${fmt1(-padT)} ${fmt1(W + padL + (o.padR ?? padT))} ${fmt1(H + padT + pad)}" data-h="${H}">
   <defs><pattern id="hatch2" width="${fmt1(fs * 0.45)}" height="${fmt1(fs * 0.45)}" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="${fmt1(fs * 0.45)}" class="hl" stroke-width="${fmt1(fs * 0.1)}"/></pattern>
   <pattern id="dots2" width="${fmt1(M / 70)}" height="${fmt1(M / 70)}" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><circle cx="${fmt1(M / 140)}" cy="${fmt1(M / 140)}" r="${fmt1(M / 560)}" class="dot"/></pattern></defs>`;
+  // concrete already poured (in situ): light hatch from the ground up to the last pour
+  if (o.poured > 0) s += `<defs><pattern id="hatch3" width="${fmt1(fs * 0.55)}" height="${fmt1(fs * 0.55)}" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><circle cx="${fmt1(fs * 0.275)}" cy="${fmt1(fs * 0.275)}" r="${fmt1(fs * 0.06)}" class="dot3"/></pattern><clipPath id="hbp"><rect x="0" y="${fmt1(H - o.poured)}" width="${W}" height="${fmt1(o.poured)}"/></clipPath></defs><path d="${wallPath(pr, y => H - y)}${holesPath(pr, y => H - y)}" fill="url(#hatch3)" fill-rule="evenodd" clip-path="url(#hbp)"/>`;
   // casting hatch: the band, minus the openings (and outside cuts)
   (o.hatch || []).forEach((h, i) => { s += `<clipPath id="hb${i}"><rect x="${fmt1(h.x)}" y="${fmt1(H - h.y - h.h)}" width="${fmt1(h.w)}" height="${fmt1(h.h)}"/></clipPath><path d="${wallPath(pr, y => H - y)}${holesPath(pr, y => H - y)}" fill="url(#hatch2)" fill-rule="evenodd" clip-path="url(#hb${i})"/>`; });
   if (o.fwRect) s += `<rect x="0" y="${fmt1(H - o.fwRect.top)}" width="${W}" height="${fmt1(o.fwRect.top - o.fwRect.base)}" class="fwrect" stroke-width="${fmt1(M / 220)}"/>`; // climbing formwork: the wall's full width
@@ -3494,12 +3526,19 @@ function seqOrder(pr, d) {
   return d.placements.map((pl, i) => ({ i, b: G.bbox(G.place(pm[pl.pid].local, pl)) })).sort((a, b) => a.b.y0 - b.b.y0 || a.b.x0 - b.b.x0).map(o => o.i);
 }
 function designHH(pr, d) { return d.placements.length * hhPerPiece(pr.fabrication); }
+// the same wall thickness for every design option of a wall (prefab: cast height; in situ: median of the selected pieces),
+// so options only differ by their void ratio and the CO2 reduction falls as the void ratio grows
+function lcaThickness(pr) {
+  if (pr.fabrication === 'prefab') return pr.castMm || S.settings.prefabFormworkMm;
+  const ts = (pr.selected || []).map(id => S.pieces[id] && S.pieces[id].thickness).filter(v => v > 0).sort((a, b) => a - b);
+  return ts.length ? ts[ts.length >> 1] : S.settings.thickness;
+}
 function lcaFor(pr, d) {
   const m = dm(pr, d), ops = pr.openings || [];
   const per = (2 * (pr.wall.w + pr.wall.h) + ops.reduce((s, o) => s + 2 * (o.w + o.h), 0)) / 1000, dia = (S.settings.rebarDiaMm || 10) / 10;
   // prefab: peripheral reinforcement (one bar around the wall and each opening), 0.617 kg/m for Ø10, scaled with the diameter²
   const rebarKg = pr.fabrication === 'prefab' ? per * 0.617 * dia * dia : 0;
-  return LCA.compute({ area: m2(m.netArea), thickness: m.thickness / 1000, voidRatio: m.fvr, perimeter: per, fab: pr.fabrication, rebarKg });
+  return LCA.compute({ area: m2(m.netArea), thickness: lcaThickness(pr) / 1000, voidRatio: m.fvr, perimeter: per, fab: pr.fabrication, rebarKg });
 }
 function designCost(pr, d) { if (!costReady()) return null; const m = dm(pr, d); return costOf(designHH(pr, d), m.mortarKg / S.settings.mortarDensity); }
 function rdpOpen(p, eps) {
@@ -3770,14 +3809,20 @@ function constrParams(pr) {
   return out;
 }
 function nPoints(pr, pid) {
-  if (pr.fabrication === 'insitu' && constrParams(pr).lifting === 'clamp') return 1;
+  if (pr.fabrication === 'insitu' && liftMode(pr, pid) === 'clamp') return 1;
   const o = pr.constr && pr.constr.npts && pr.constr.npts[pid]; if (o) return o;
   const pl = activeDesign(pr).placements.find(x => x.pid === pid);
   return Constr.autoPoints({ local: S.pieces[pid]._local }, pl, S.settings.twoPointWidth);
 }
+// in situ: a clamp grips the upper edge above the formwork, so it is only possible for pieces sticking out of it
+function sticksOut(pr, pid) {
+  const c = cbuild(pr), lift = c.lifts.find(l => l.pids.includes(pid)), pl = activeDesign(pr).placements.find(x => x.pid === pid); if (!lift || !pl) return true;
+  return G.bbox(G.place(S.pieces[pid]._local, pl)).y1 > (lift.fwTop || lift.top) + 20;
+}
+function liftMode(pr, pid) { const m = constrParams(pr).lifting; if (pr.fabrication !== 'insitu') return m; const o = (pr.constr.devOver || {})[pid]; const want = o || m; return want === 'clamp' && !sticksOut(pr, pid) ? 'anchor' : want; }
 function liftFor(pr, pid) {
   const pl = activeDesign(pr).placements.find(x => x.pid === pid), pc = S.pieces[pid];
-  return Constr.liftInfo({ ...pc, local: pc._local }, pl, pr.fabrication, constrParams(pr).lifting, S.settings.density, nPoints(pr, pid));
+  return Constr.liftInfo({ ...pc, local: pc._local }, pl, pr.fabrication, liftMode(pr, pid), S.settings.density, nPoints(pr, pid));
 }
 function cbuild(pr) {
   const d = activeDesign(pr), params = constrParams(pr);
@@ -3808,7 +3853,7 @@ function doneView(pr) {
       <span>${t('CONSTRUCTION')} <b>${durTxt}</b></span><span>${t('LABOUR EST.')} <b>${Math.round(designHH(pr, d))} hh</b></span>
       <span>${t('PIECES')} <b>${d.placements.length}</b> · ${fl} ${t('flipped')}</span><span>${t('DOCUMENTED')} <b>${photos.length ? '✓ ' + photos.length + ' ' + t('photo' + (photos.length > 1 ? 's' : '')) : '✗ ' + t('no photo')}</b></span>
     </div>
-    ${photos.length ? '' : `<div class="drawing">${wallDraw(pr, d, { labels: true, state: () => 'fut' })}</div>`}
+    ${photos.length ? '' : `<div class="drawing">${wallDraw(pr, d, { labels: true, solidWall: true, state: () => 'fut' })}</div>`}
     <p class="muted small pad">${t('completed')} ${fmtDate(pr.completedAt)}${photos.length ? ' · ' + t('the design drawing is in the report') : ''}</p>
   </main>
   <div class="actions three"><label class="btn sec">${icon('camera')} ${photos.length ? t('ADD PHOTO') : t('PHOTO')}<input type="file" accept="image/*" capture="environment" hidden data-a="final-photo"></label><button class="btn sec" data-a="report">${icon('doc')} ${t('REPORT')}</button><button class="btn" data-a="go-home">${icon('build')} ${t('MENU')}</button></div>`;
@@ -3828,7 +3873,7 @@ function setupView(pr) {
   const ovs = c.lifts.slice(1).map(l => l.overlap);
   return `<div class="bar"><span></span><span>${t('CONSTRUCTION SETUP')}</span>${ins ? `<button data-a="csettings">${icon('gear')} ${t('OPTIONS')}</button>` : '<span></span>'}</div>
   <main class="scroll">
-    <div class="drawing">${wallDraw(pr, d, { state: () => 'fut', dots: true, solidWall: true, lines: ins ? c.lifts.slice(0, -1).map(l => ({ x1: 0, y1: l.top, x2: pr.wall.w, y2: l.top, dash: true })) : [] })}</div>
+    <div class="drawing">${wallDraw(pr, d, { state: pl => c.warnings.some(w => w.pid === pl.pid) ? 'warnp' : 'fut', dots: true, solidWall: true, lines: ins ? c.lifts.slice(0, -1).map(l => ({ x1: 0, y1: l.top, x2: pr.wall.w, y2: l.top, dash: true })) : [] })}</div>
     <div class="pad">
       <p class="lead">${ins ? t('In situ, vertical assembly in climbing formwork.') : t('Horizontal prefabrication on a tilting table.')}</p>
       ${ins ? `<p class="muted small">${t('Formwork')} ${p.formworkMm} mm · ${t('rubble tip above formwork')} ${p.tipMm} mm · ${t('overlap')} ${p.overlapAuto ? t('automatic') + (ovs.length ? ` (${Math.round(Math.min(...ovs))}–${Math.round(Math.max(...ovs))} mm)` : '') : p.overlapMm + ' mm'}</p>
@@ -3864,13 +3909,13 @@ function stepText(pr, st, c) {
   switch (st.type) {
     case 'formwork': return st.lift === 0 ? `${t('Place formwork up to')} <b>${cm(st.top)} cm</b>` : `${t('Once the infill concrete is hard enough, raise the climbing formwork up to')} <b>${cm(st.top)} cm</b>`;
     case 'prepare': if (!S.ui.found) return `${t('Find piece')} ${code}`;
-      return ins ? (p.lifting === 'clamp' ? `${t('Clamp')} ${code} ${t('at the marked point' + (li.pts.length > 1 ? 's' : ''))} ${t('and lift it')}${kg}` : `${t('Drill anchor hole' + (li.pts.length > 1 ? 's' : ''))} ${t('in')} ${code}, ${t('then lift it from the anchor' + (li.pts.length > 1 ? 's' : ''))}${kg}`) : `${t('Fix the lifting insert' + (li.pts.length > 1 ? 's' : ''))} ${t('in')} ${code} ${t('and lift it')}${kg}`;
+      return ins ? (liftMode(pr, st.pid) === 'clamp' ? `${t('Clamp')} ${code} ${t('at the marked point' + (li.pts.length > 1 ? 's' : ''))} ${t('and lift it')}${kg}` : `${t('Drill anchor hole' + (li.pts.length > 1 ? 's' : ''))} ${t('in')} ${code}, ${t('then lift it from the anchor' + (li.pts.length > 1 ? 's' : ''))}${kg}`) : `${t('Fix the lifting insert' + (li.pts.length > 1 ? 's' : ''))} ${t('in')} ${code} ${t('and lift it')}${kg}`;
     case 'drill': return `${t('Drill anchor hole' + (li.pts.length > 1 ? 's' : '') + ' for')} ${code}`;
-    case 'lift': return ins ? (p.lifting === 'clamp' ? `${t('Clamp and lift')} ${code}${kg}` : `${t('Lift')} ${code} ${t('from anchor point' + (li.pts.length > 1 ? 's' : ''))}${kg}`) : `${t('Lift')} ${code} ${li.pts.length > 1 ? t('from the 2 lifting points') : t('from its centre of area')}${kg}`;
+    case 'lift': return ins ? (liftMode(pr, st.pid) === 'clamp' ? `${t('Clamp and lift')} ${code}${kg}` : `${t('Lift')} ${code} ${t('from anchor point' + (li.pts.length > 1 ? 's' : ''))}${kg}`) : `${t('Lift')} ${code} ${li.pts.length > 1 ? t('from the 2 lifting points') : t('from its centre of area')}${kg}`;
     case 'clean': return ins ? `${t('Clean')} ${code} ${t('with water and apply mortar')}` : `${t('Wet')} ${code} ${t('and spread a mortar bed')}`;
-    case 'place': { const b = c.byPid[st.pid]; if (!ins && !S.ui.coords) return `${t('Place')} ${code} ${t('as shown')}${pl.f ? ` (<b>${t('flipped')}</b>)` : ''}${t(', display coordinates if needed')}`; return `${t('Place')} ${code} ${t('between')} <b>${cm(b.x0)}cm</b> ${t('and')} <b>${cm(b.x1)}cm</b> ${t('from left')}, <b>${cm(b.bot)}cm</b> ${t('from bottom')}${pl.f ? `, <b>${t('flipped')}</b>` : ''}`; }
+    case 'place': { const b = c.byPid[st.pid]; if (!ins && !S.ui.coords) return `${t('Place')} ${code} ${t('as shown')}${pl.f ? ` (<b>${t('flipped')}</b>)` : ''}${t(', display coordinates if needed')}`; return `${t('Place')} ${code} ${t('between')} <b>${cm(b.x0)}cm</b> ${t('and')} <b>${cm(b.x1)}cm</b> ${t('from left')}, ${ins ? (fw => `<b>${cm(fw - b.bot)}cm</b> ${t('below the top of the formwork')}`)((c.lifts.find(l => l.pids.includes(st.pid)) || {}).fwTop || c.lifts[c.lifts.length - 1].top) : `<b>${cm(b.bot)}cm</b> ${t('from bottom')}`}${pl.f ? `, <b>${t('flipped')}</b>` : ''}`; }
     case 'opbox': return `${t('Set the vertical formwork of opening')} ${st.ops.map(i => '#' + (i + 1)).join(', ')} ${t('over its full height')} (<b>${st.ops.map(i => cm(pr.openings[i].h)).join(', ')} cm</b>) ${t('before placing the rubble around it')}`;
-    case 'fill': return `${t('Fill voids with small rubble pieces and liquid mortar up to')} <b>${cm(st.top)} cm</b>`;
+    case 'fill': { const below = (st.fwTop || st.top) - st.top; return below > 5 ? `${t('Fill voids with small rubble and liquid mortar up to')} <b>${cm(below)} cm</b> ${t('below the formwork top')} (${t('at')} ${cm(st.top)} cm)` : `${t('Fill voids with small rubble and liquid mortar up to the formwork top')} (<b>${cm(st.top)} cm</b>)`; }
     case 'table': return `${t('Set up the tilting table formwork')} <b>${cm(pr.wall.w)} × ${cm(pr.wall.h)} cm</b>, <b>${cm(p.castMm)} cm</b> ${t('high')}${(pr.openings || []).length ? `, ${t('with')} ${pr.openings.length} ${t('opening box(es) as shown')}` : ''}`;
     case 'pour': return `${t('Cast about')} <b>${castLitres(pr)} L</b> ${t('of recycled concrete into all voids up to the formwork height,')} <b>${cm(p.castMm)} cm</b>, ${t('and let it cure')}`;
     case 'cure': return t('Let the concrete cure');
@@ -3911,6 +3956,18 @@ function tiltSVG(pr) {
   sv += `<path d="M${fmt1(hook[0])} ${fmt1(hook[1])}v${fmt1(-W / 25)}" class="iso-sling"/><circle cx="${fmt1(hook[0])}" cy="${fmt1(hook[1] - W / 25 - W / 80)}" r="${fmt1(W / 80)}" class="iso-hookc"/>`;
   const xs = all.map(p => p[0]), ys = all.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys) - W / 15, y1 = Math.max(...ys), pd = (x1 - x0) * 0.05;
   return `<svg class="iso" viewBox="${fmt1(x0 - pd)} ${fmt1(y0 - pd)} ${fmt1(x1 - x0 + 2 * pd)} ${fmt1(y1 - y0 + 2 * pd)}" style="--sw:${fmt1(W / 300)}">${sv}</svg>`;
+}
+// vertical dimension with arrow ends (used for depths measured down from the formwork top)
+function arrowDim(x, y1, y2, label, fs, M) {
+  const a = M / 120, w = a * 0.6, d = y2 > y1 ? 1 : -1;
+  const head = (y, s) => `<path d="M${fmt1(x)} ${fmt1(y)}L${fmt1(x - w)} ${fmt1(y + s * a)}L${fmt1(x + w)} ${fmt1(y + s * a)}Z" class="arrowhd"/>`;
+  return `<line x1="${fmt1(x)}" y1="${fmt1(y1)}" x2="${fmt1(x)}" y2="${fmt1(y2)}" class="dimln" stroke-width="${fmt1(M / 600)}"/>` + head(y1, d) + head(y2, -d) + tagSVG(x + M * 0.008, (y1 + y2) / 2, label, fs, 'start', 0);
+}
+// formwork height shown next to the wall whenever a depth is measured from its top
+function formworkDimOld(fw, H, M, fs) { const x = -M * 0.045; return `<line x1="${fmt1(x - M * 0.01)}" y1="${fmt1(H - fw.top)}" x2="0" y2="${fmt1(H - fw.top)}" class="cline" stroke-width="${fmt1(M / 800)}"/><line x1="${fmt1(x - M * 0.01)}" y1="${fmt1(H - fw.base)}" x2="0" y2="${fmt1(H - fw.base)}" class="cline" stroke-width="${fmt1(M / 800)}"/>` + dimLine(x, H - fw.base, x, H - fw.top, `${t('formwork')} ${cm(fw.top - fw.base)} cm`, fs * 0.75, M); }
+const fwTopLine = (top, W, M, padL) => ({ x1: -padL * 0.15, y1: top, x2: W + M * 0.02, y2: top, label: `${cm(top)} cm`, lx: -padL + M * 0.01, ly: top, anchor: 'start' });
+function liftDeviceSegPiece(lm, pid) {
+  return `<p class="lbl">${t('Lifting device for this piece')}</p><div class="seg dev">${[['clamp', 'CLAMP'], ['anchor', 'DRILLED ANCHORS']].map(([k, l]) => `<button class="${lm === k ? 'on' : ''}" data-a="piece-device" data-id="${pid}" data-v="${k}">${t(l)}</button>`).join('')}</div>`;
 }
 function liftDeviceSeg(p) {
   return `<p class="lbl">${t('Lifting device')}</p><div class="seg dev">${[['clamp', 'CLAMP'], ['anchor', 'DRILLED ANCHORS']].map(([k, l]) => `<button class="${p.lifting === k ? 'on' : ''}" data-a="step-device" data-v="${k}">${t(l)}</button>`).join('')}</div><p class="lbl">${t('Lifting points')}</p>`;
@@ -3972,13 +4029,13 @@ function stepView(pr) {
       main = `<div class="found">${photoWithOverlay(p, img, { outline: true, pad: 0.16 })}</div>
 `;
     } else {
-      const n = nPoints(pr, st.pid), u = ins ? (cp.lifting === 'clamp' ? ['1 CLAMP', '2 CLAMPS'] : ['1 ANCHOR', '2 ANCHORS']) : ['1 POINT', '2 POINTS'];
+      const lm = ins ? liftMode(pr, st.pid) : null, out = ins ? sticksOut(pr, st.pid) : true, n = nPoints(pr, st.pid), u = ins ? (lm === 'clamp' ? ['1 CLAMP', '2 CLAMPS'] : ['1 ANCHOR', '2 ANCHORS']) : ['1 POINT', '2 POINTS'];
       main = `<div class="found">${photoWithOverlay(p, img, { lift: { local: ll.local, up: ll.up, cross: !ins }, flip: ll.pl.f, pad: 0.16, kg: ll.li.kg })}
 </div>
-        <div class="pad">${pr.status !== 'done' ? `${ins ? liftDeviceSeg(cp).replace(cp.lifting === 'clamp' ? /<p class="lbl">[^<]*<\/p>$/ : /$^/, '') : `<p class="lbl">${t('Lifting points')}</p>`}${ins && cp.lifting === 'clamp' ? `<p class="muted small sub">${t('One clamp on the upper edge, above the centre of area.')}</p>` : `<div class="seg">${[1, 2].map(v => `<button class="${n === v ? 'on' : ''}" data-a="npts" data-v="${v}" data-id="${st.pid}">${t(u[v - 1])}</button>`).join('')}</div>`}` : ''}</div>`;
+        <div class="pad">${pr.status !== 'done' ? `${ins ? (!out ? `<div class="warn devsw">${icon('i')} <div><b>${t('Drilled anchors for this piece')}</b><br>${t('It does not stick out of the formwork, so a clamp would hit the formwork.')}</div></div>` : liftDeviceSegPiece(lm, st.pid)) : `<p class="lbl">${t('Lifting points')}</p>`}${ins && lm === 'clamp' ? `<p class="muted small sub">${t('One clamp on the upper edge, above the centre of area.')}</p>` : `<div class="seg">${[1, 2].map(v => `<button class="${n === v ? 'on' : ''}" data-a="npts" data-v="${v}" data-id="${st.pid}">${t(u[v - 1])}</button>`).join('')}</div>`}` : ''}</div>`;
     }
   } else {
-    const o = { state, padL, fs: M / 21 };
+    const o = { state, padL, fs: ins ? M / 28 : M / 21 };
     const b = st.pid ? c.byPid[st.pid] : null;
     if (st.type === 'formwork') { o.fwRect = { base: st.base, top: st.top }; o.lines = [{ x1: -padL * 0.15, y1: st.top, x2: W + M * 0.02, y2: st.top, label: `${cm(st.top)} cm`, lx: -padL + M * 0.01, ly: st.top, anchor: 'start' }]; o.state = pl => placedAt[pl.pid] < k ? 'done' : 'ghost'; }
     if (st.type === 'opbox') { o.opBoxes = st.ops; o.state = pl => placedAt[pl.pid] < k ? 'done' : 'ghost'; }
@@ -4015,13 +4072,20 @@ function stepView(pr) {
     else if (st.type === 'place') {
       o.band = band;
       const anc = x => x < W * 0.5 ? 'start' : 'end';
+      const fwTopP = ins ? ((c.lifts.find(l => l.pids.includes(st.pid)) || {}).fwTop || null) : null, yLab = fwTopP ? '' : `y: ${cm(b.bot)}cm`;
       o.lines = [{ x1: b.x0, y1: -M * 0.02, x2: b.x0, y2: H + M * 0.02, label: `x1: ${cm(b.x0)}cm`, lx: b.x0, ly: -M * 0.035, anchor: anc(b.x0) },
       { x1: b.x1, y1: -M * 0.02, x2: b.x1, y2: H + M * 0.02, label: `x2: ${cm(b.x1)}cm`, lx: b.x1, ly: H + M * 0.035, anchor: anc(b.x1) },
-      b.x0 < W * 0.5 ? { x1: -M * 0.02, y1: b.bot, x2: W + padL * 0.15, y2: b.bot, label: `y: ${cm(b.bot)}cm`, lx: W + M * 0.06, ly: b.bot, anchor: 'end' }
-        : { x1: -padL * 0.15, y1: b.bot, x2: W + M * 0.02, y2: b.bot, label: `y: ${cm(b.bot)}cm`, lx: -padL + M * 0.01, ly: b.bot, anchor: 'start' }];
+      b.x0 < W * 0.5 ? { x1: -M * 0.02, y1: b.bot, x2: W + padL * 0.15, y2: b.bot, label: yLab, lx: W + M * 0.06, ly: b.bot, anchor: 'end' }
+        : { x1: -padL * 0.15, y1: b.bot, x2: W + M * 0.02, y2: b.bot, label: yLab, lx: -padL + M * 0.01, ly: b.bot, anchor: 'start' }];
       o.state = pl => pl.pid === st.pid ? 'cur' : state(pl);
+      if (fwTopP) { // depth below the formwork top, as a dimension next to the piece
+        const lf = c.lifts.find(l => l.pids.includes(st.pid)); o.fwRect = { base: lf.base, top: fwTopP };
+        const xd = b.x1 + M * 0.05 < W ? b.x1 + M * 0.05 : b.x0 - M * 0.05;
+        o.extra = (o.extra || '') + `<line x1="${fmt1(Math.min(b.x0, xd))}" y1="${fmt1(H - b.bot)}" x2="${fmt1(Math.max(b.x1, xd) + M * 0.008)}" y2="${fmt1(H - b.bot)}" class="cline" stroke-width="${fmt1(M / 800)}"/><line x1="${fmt1(xd - M * 0.01)}" y1="${fmt1(H - fwTopP)}" x2="${fmt1(xd + M * 0.01)}" y2="${fmt1(H - fwTopP)}" class="cline" stroke-width="${fmt1(M / 800)}"/>` + arrowDim(xd, H - fwTopP, H - b.bot, `${cm(fwTopP - b.bot)} cm`, o.fs * 0.8, M);
+        o.lines = [...o.lines.slice(0, 2), fwTopLine(fwTopP, W, M, padL)];
+      }
     }
-    if (st.type === 'fill') { const fw = c.steps.find(x => x.type === 'formwork' && x.lift === st.lift); if (fw) o.fwRect = { base: fw.base, top: fw.top }; o.hatch = [{ x: 0, y: curLift ? (c.lifts[st.lift - 1] || { top: 0 }).top : 0, w: W, h: st.top - (c.lifts[st.lift - 1] || { top: 0 }).top }]; o.lines = [{ x1: -padL * 0.15, y1: st.top, x2: W, y2: st.top, label: `${cm(st.top)} cm`, lx: -padL + M * 0.01, ly: st.top, anchor: 'start' }]; o.state = pl => placedAt[pl.pid] < k ? 'done' : 'ghost'; }
+    if (st.type === 'fill') { const fw = c.steps.find(x => x.type === 'formwork' && x.lift === st.lift); if (fw) o.fwRect = { base: fw.base, top: fw.top }; if (fw && fw.top - st.top > 5) { const xd = W * 0.5; o.extra = (o.extra || '') + arrowDim(xd, H - fw.top, H - st.top, `${cm(fw.top - st.top)} cm`, M / 34, M); o.fillDepth = fw.top; } o.hatch = [{ x: 0, y: curLift ? (c.lifts[st.lift - 1] || { top: 0 }).top : 0, w: W, h: st.top - (c.lifts[st.lift - 1] || { top: 0 }).top }]; o.lines = [{ x1: -padL * 0.15, y1: st.top, x2: W, y2: st.top, label: `${cm(st.top)} cm`, lx: -padL + M * 0.01, ly: st.top, anchor: 'start' }]; o.state = pl => placedAt[pl.pid] < k ? 'done' : 'ghost'; }
     if (st.type === 'pour') { o.hatchWall = true; o.state = () => 'done'; o.padB = M * 0.1; o.extra = tagSVG(W / 2, H + M * 0.05, `≈ ${castLitres(pr)} L`, M / 26); }
     if (st.type === 'rebar') {
       o.state = () => 'hide'; o.solidWall = true; o.blockouts = true; o.padB = M * 0.07; const cv = S.settings.rebarCoverMm + 10;
@@ -4046,12 +4110,20 @@ function stepView(pr) {
     }
     if (st.type === 'lintel') { o.state = pl => placedAt[pl.pid] < k ? 'done' : 'ghost'; o.lintelOn = true;
       const f = M / 34, L = pr.lintel; let ex = '';
-      for (const [i, l] of lintelRects(pr).entries()) { const op = pr.openings.filter(q => q.y + q.h < pr.wall.h - 1)[i]; if (!op) continue; const yb = H - l.y - l.h - M * 0.03;
-        ex += dimLine(l.x, yb, op.x, yb, `${cm(L.sup)} cm`, f * 0.8, M) + dimLine(op.x + op.w, yb, l.x + l.w, yb, `${cm(L.sup)} cm`, f * 0.8, M);
-        ex += dimLine(l.x - M * 0.03, H, l.x - M * 0.03, H - l.y, `${cm(l.y)} cm`, f * 0.8, M); }
+      for (const [i, l] of lintelRects(pr).entries()) { const op = pr.openings.filter(q => q.y + q.h < pr.wall.h - 1)[i]; if (!op) continue;
+        const top = H - l.y - l.h, y1 = top - M * 0.035, y2 = top - M * 0.075, y3 = top - M * 0.115, cl = (x, ya, yb) => `<line x1="${fmt1(x)}" y1="${fmt1(ya)}" x2="${fmt1(x)}" y2="${fmt1(yb)}" class="cline" stroke-width="${fmt1(M / 800)}"/>`;
+        // construction lines up from the lintel ends and the opening edges
+        ex += cl(l.x, top, y3) + cl(l.x + l.w, top, y2) + cl(op.x, H - op.y - op.h, y1) + cl(op.x + op.w, H - op.y - op.h, y1);
+        ex += dimLine(l.x, y1, op.x, y1, `${cm(L.sup)}`, f * 0.75, M) + dimLine(op.x + op.w, y1, l.x + l.w, y1, `${cm(L.sup)}`, f * 0.75, M); // bearing on each side
+        ex += dimLine(l.x, y2, l.x + l.w, y2, `${t('lintel')} ${cm(l.w)} cm`, f * 0.75, M); // lintel length
+        ex += cl(0, H, y3) + dimLine(0, y3, l.x, y3, `${cm(l.x)} cm`, f * 0.75, M); // position from the left edge
+        ex += dimLine(l.x - M * 0.03, H, l.x - M * 0.03, H - l.y, `${cm(l.y)} cm`, f * 0.8, M); } // seat height
       o.extra = ex; o.padL = M * 0.1; }
     if (st.type === 'tilt') o.state = () => 'done';
     if (st.type === 'cure' || st.type === 'done') o.state = () => 'done';
+    if (ins) o.poured = Math.max(0, ...c.steps.slice(0, k).filter(x => x.type === 'fill').map(x => x.top));
+    if (o.fillDepth && o.lines) o.lines = [...o.lines.map(l => ({ ...l, label: null })), fwTopLine(o.fillDepth, W, M, padL)]; // depth from the formwork top instead of the cast altitude
+    { const nN = pr.fabrication === 'prefab' ? Constr.notches(pr).length : 0, nO = (pr.openings || []).length; o.padL = M * Math.max(0.16, 0.08 + 0.035 * (nO + 1)); o.padR = M * 0.16; o.padB = M * (0.1 + 0.035 * (nN + nO)); } // same frame for every step
     main = st.type === 'tilt' ? `<div class="drawing"><img class="tiltimg" src="${TILT_IMG}" alt="${t('Panel tilted on the table, lifted with two slings from the bottom notches')}"></div>` : `<div class="drawing">${wallDraw(pr, d, o)}</div>`;
     if (st.type === 'done') { const fp = S.imgCache['final-' + pr.id]; if (fp === undefined) getImages('final-' + pr.id).then(r => { if (r) render(); }); if (fp) main = `<div class="photo"><img src="${fp.crop}" alt="${t('Finished wall')}"></div>`; }
   }
@@ -4277,11 +4349,25 @@ function bindDragNum(inp) {
   inp.addEventListener('focus', () => { const sg = $('.thsug'); if (sg) sg.hidden = false; });
   inp.addEventListener('blur', () => setTimeout(() => { const sg = $('.thsug'); if (sg && document.activeElement !== inp) sg.hidden = true; }, 250));
 }
+// deleting a wall: its pieces can go back to the stock (available) or be deleted with it
+function wallPieceIds(pr) { const ids = new Set(pr.selected || []); for (const d of pr.designs || []) for (const pl of d.placements) ids.add(pl.pid); return [...ids].filter(id => S.pieces[id]); }
+function askDeleteWall(id) {
+  const pr = S.projects[id]; if (!pr) return; const n = wallPieceIds(pr).length;
+  modal(`<h3 class="modal-h">${t('DELETE')} ${esc(wallName(pr))}?</h3><p class="modal-text small">${n ? `${n} ${t('rubble piece(s) are selected or used in this wall.')}` : t('No rubble pieces are linked to this wall.')}</p>
+    <div class="btnrow col">${n ? `<button class="btn sec" data-a="wall-del-do" data-id="${id}" data-v="keep">${t('DELETE WALL, KEEP PIECES AVAILABLE')}</button><button class="btn danger" data-a="wall-del-do" data-id="${id}" data-v="all">${icon('trash')} ${t('DELETE WALL AND ITS PIECES')}</button>` : `<button class="btn danger" data-a="wall-del-do" data-id="${id}" data-v="keep">${icon('trash')} ${t('DELETE WALL')}</button>`}<button class="btn sec" data-a="modal-close">${t('CANCEL')}</button></div>`, { focus: false });
+}
+function deleteWall(id, withPieces) {
+  const pr = S.projects[id]; if (!pr) return; const ids = wallPieceIds(pr);
+  for (const pid of ids) { const p = S.pieces[pid]; if (!p) continue; if (withPieces) { delete S.pieces[pid]; delete S.imgCache[pid]; DB.del('pieces', pid); DB.del('images', pid); } else if (p.status === 'used') { p.status = 'stock'; savePiece(p); } }
+  delete S.projects[id]; DB.del('projects', id); DB.del('images', 'final-' + id);
+  if (S.ui.pid === id) S.ui.view = 'home';
+  toast(withPieces ? `${t('Wall and')} ${ids.length} ${t('piece(s) deleted')}` : t('Wall deleted, its pieces are available again')); render();
+}
 function closeOv() { const o = S.ui.ov; S.ui.ov = o && o.back ? o.back : null; renderOv(); render(); }
 
 const A = {
   // navigation
-  tab: el => { S.ui.tab = el.dataset.v; const ll = S.ui.lastLibLoc || S.meta.lastLoc; S.ui.libLoc = el.dataset.v === 'library' && ll && S.locations[ll] ? ll : null; S.ui.libStatus = 'stock'; S.ui.selMode = false; render(); },
+  tab: el => { if (el.dataset.v === 'settings' && S.ui.tab === 'settings' && S.ui.view !== 'project') { S.ui.openSec = new Set(); render(); return; } S.ui.tab = el.dataset.v; const ll = S.ui.lastLibLoc || S.meta.lastLoc; S.ui.libLoc = el.dataset.v === 'library' && ll && S.locations[ll] ? ll : null; S.ui.libStatus = 'stock'; S.ui.selMode = false; render(); },
   'new-project': () => newProject(),
   'open-project': el => openProject(el.dataset.id),
   'close-project': () => { discardIfPristine(curP()); S.ui.view = 'home'; S.ui.tab = 'build'; S.ui.gen = null; render(); },
@@ -4411,7 +4497,7 @@ const A = {
     const pr = curP(), n = { ...JSON.parse(JSON.stringify(pr)), id: uid(), name: pr.name + ' (copy)', created: Date.now(), status: 'progress', stage: 'config', selected: [], designs: [], designId: null, constr: { started: false, step: 0, params: null }, completedAt: null };
     S.projects[n.id] = n; saveProject(n); closeModal(); openProject(n.id);
   },
-  'del-project': () => { closeModal(); confirmBox(t('Delete this wall? Its pieces return to the stock as available.'), t('DELETE'), () => { const pr = curP(); delete S.projects[pr.id]; DB.del('projects', pr.id); DB.del('images', 'final-' + pr.id); S.ui.view = 'home'; render(); }, true); },
+  'del-project': () => { closeModal(); askDeleteWall(curP().id); },
   fab: el => { const pr = curP(); if (pr.fabrication === el.dataset.v) return; pr.fabrication = el.dataset.v; pr.constr = { started: false, step: 0, params: null }; saveProject(pr); render(); },
   'op-add': () => { const pr = curP(); const o = { x: 0, y: 0, w: Math.min(1000, pr.wall.w * 0.8), h: Math.min(2150, pr.wall.h * 0.9) }; o.x = (pr.wall.w - o.w) / 2; o.y = 0; clampOpening(pr, o); (pr.openings = pr.openings || []).push(o); invalidateDesigns(pr); saveProject(pr); render(); },
   'op-del': el => { const pr = curP(); pr.openings.splice(+el.dataset.i, 1); invalidateDesigns(pr); saveProject(pr); render(); },
@@ -4521,7 +4607,8 @@ const A = {
     modal(`<h3 class="modal-h">${t('WALL')}</h3><label class="lbl" for="wallname">${t('Name')}</label><input id="wallname" type="text" value="${esc(pr.name)}">
       <div class="btnrow"><button class="btn danger" data-a="wall-del" data-id="${pr.id}">${icon('trash')} ${t('DELETE')}</button><button class="btn" data-a="wall-rename" data-id="${pr.id}">${t('SAVE')}</button></div>`, { focus: false }); },
   'wall-rename': el => { const pr = S.projects[el.dataset.id], n = $('#wallname').value.trim(); if (n) { pr.name = n; saveProject(pr); } closeModal(); render(); },
-  'wall-del': el => { const id = el.dataset.id; closeModal(); confirmBox(t('Delete this wall? Its pieces return to the stock as available.'), t('DELETE'), () => { delete S.projects[id]; DB.del('projects', id); DB.del('images', 'final-' + id); render(); }, true); },
+  'wall-del': el => { closeModal(); askDeleteWall(el.dataset.id); },
+  'wall-del-do': el => { const id = el.dataset.id, withPieces = el.dataset.v === 'all'; closeModal(); deleteWall(id, withPieces); },
   'dup-design': (el, e) => { e && e.stopPropagation(); const pr = curP(), src = pr.designs.find(d => d.id === el.dataset.id); if (!src) return;
     const cp = { id: uid(), created: Date.now(), placements: JSON.parse(JSON.stringify(src.placements)), manual: true, copyOf: src.id };
     const i = pr.designs.indexOf(src); pr.designs.splice(i + 1, 0, cp); saveProject(pr); toast(t('Option duplicated as a manual design.')); render(); },
@@ -4567,6 +4654,7 @@ const A = {
   'thk-sug': el => { const inp = $('[data-a=scan-thick]'); if (!inp) return; inp.value = el.dataset.v; S.ui.ov.cur.thickness = el.dataset.v; inp.closest('.kv') && inp.closest('.kv').classList.remove('needt'); const sg = $('.thsug'); if (sg) sg.hidden = true; },
   'backup-now': () => { closeModal(); A['export-data'](); },
   'backup-later': () => { S.meta.remindAfter = Date.now() + 864e5; saveMeta(); closeModal(); },
+  'piece-device': el => { const pr = curP(); pr.constr.devOver = { ...(pr.constr.devOver || {}), [el.dataset.id]: el.dataset.v }; saveProject(pr); render(); },
   joints: () => { S.ui.joints = !S.ui.joints; render(); },
   'co2-info': () => { const pr = curP(), d = activeDesign(pr), l = lcaFor(pr, d), m = dm(pr, d);
     modal(`<h3 class="modal-h">${t('CARBON FOOTPRINT')}</h3><p class="modal-text small">${t('Embodied emissions (stages A1–A4 and C2–C4) of this wall compared with a precast reinforced concrete wall with 50% recycled aggregates of the same size. Inputs: net area')} ${fmt2(m2(m.netArea))} m², ${t('thickness')} ${cm(m.thickness)} cm, ${t('void ratio')} ${Math.round(m.fvr * 100)}%, ${pr.fabrication === 'prefab' ? t('prefabrication in a precast plant with rubble from a nearby recycling centre') : t('on-site construction reusing rubble from the site')}.</p>
